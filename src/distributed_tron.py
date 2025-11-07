@@ -13,8 +13,6 @@ TRON (Trust Region Newton) distribuido para Logistic Regression en PySpark.
 - Usa broadcast(w) y broadcast(v) para reducir comunicación.
 - Coalesce previo al reduce para disminuir mensajes al driver.
 - CG de Steihaug para respetar la región de confianza (trust region).
-
-Autor: tú + ChatGPT :)
 """
 
 import os
@@ -28,38 +26,35 @@ from data_loader import  get_spark_context, load_svm_data
 
 
 
-def _is_sparse(x):
+def _is_sparse(x): #verifica si x es un SparceVector, se usa para ahorrar memoria y tiempo
     return isinstance(x, SparseVector)
 
-def _is_dense(x):
+def _is_dense(x): #detecta si x es un vector DenseVector, para operaciones sobre vectores completos
     return isinstance(x, DenseVector) or isinstance(x, np.ndarray) or isinstance(x, list) or isinstance(x, tuple)
 
-def _sparse_dot(x: SparseVector, w: np.ndarray) -> float:
+def _sparse_dot(x: SparseVector, w: np.ndarray) -> float: #producto punto de un vector denso y uno disperso
     # w es denso
     idx = x.indices
     val = x.values
-    return float(np.dot(w[idx], val))
+    return float(np.dot(w[idx], val)) #multiplica solo los elementos de w correspondientes a los índices no nulos de x.
 
-def _sparse_axpy(alpha: float, x: SparseVector, y: np.ndarray):
+def _sparse_axpy(alpha: float, x: SparseVector, y: np.ndarray): #operacion tiempo AXPY
     # y += alpha * x
     if alpha == 0.0:
         return
     idx = x.indices
     val = x.values
-    y[idx] += alpha * val
+    y[idx] += alpha * val #esto se realiza dentro de cada partición del RDD usando mappartitions
 
-def _dense_dot(x: DenseVector, w: np.ndarray) -> float:
+def _dense_dot(x: DenseVector, w: np.ndarray) -> float: #calcula el producto punto entre dos vectores densos.
     return float(np.dot(np.asarray(x), w))
 
-def _dense_axpy(alpha: float, x: DenseVector, y: np.ndarray):
+def _dense_axpy(alpha: float, x: DenseVector, y: np.ndarray): # ealiza la operación y←y+αx para vectores densos.
     if alpha == 0.0:
         return
     y += alpha * np.asarray(x)
 
 
-# ---------------------------
-# Funciones objetivo / gradiente / Hv distribuidas
-# ---------------------------
 
 def _partition_obj_grad_hv(iterator, w_b, v_b, C, dim):
     """
@@ -159,7 +154,7 @@ def _partition_obj_grad_hv(iterator, w_b, v_b, C, dim):
 
 
 def _aggregate_sums(rdd, num_parts=None):
-    """Reduce de arrays/escalares sumando. (Opcionalmente coalesce antes)"""
+    """Reduce de arrays/escalares sumando."""
     mapped = rdd
     if num_parts is not None:
         # Reducimos #particiones antes del reduce para bajar costo de comunicación
@@ -193,9 +188,7 @@ def hessian_vector_product(data_rdd, w_b, v, C, dim, coalesce_parts=None):
     return v + C * hv_sum
 
 
-# ---------------------------
 # Conjugate Gradient (Steihaug) con trust-region
-# ---------------------------
 
 def cg_steihaug(hvp_func, g, delta, tol=1e-3, max_iter=250):
     """
@@ -363,11 +356,6 @@ def tron(
     w_b.unpersist(blocking=False)
     return w
 
-
-# ---------------------------
-# Predicción y evaluación
-# ---------------------------
-
 def predict_labels(data_rdd, w):
     """
     Devuelve (accuracy, total, correctos). Predicción por signo(x·w).
@@ -392,10 +380,6 @@ def predict_labels(data_rdd, w):
     return acc, total, correct
 
 
-# ---------------------------
-# Main 
-# ---------------------------
-
 if __name__ == "__main__":
     import argparse
     sc = get_spark_context()
@@ -417,7 +401,6 @@ if __name__ == "__main__":
     parser.add_argument("--eval", action="store_true", help="Evalúa accuracy al final (en el mismo dataset)")
     args = parser.parse_args()
 
-    # Cargar datos
     data_rdd = load_svm_data(args.data, partitions=args.partitions)
     data_rdd.persist(StorageLevel.MEMORY_ONLY)
     first = data_rdd.first()
