@@ -29,11 +29,13 @@ if [ ! -f "$MODEL_PATH" ]; then
   echo "[2] Entrenando modelo TRON..."
   python distributed_tron.py --data "$DATASET_PATH" \
       --C $C --partitions $PARTITIONS --max_outer_iter $MAX_OUTER_ITER \
-      --coalesce $COALESCE --eval --save "$MODEL_PATH"
+      --coalesce $COALESCE --save "$MODEL_PATH" --eval
+
+
 else
   echo "[2] Modelo TRON encontrado. Saltando entrenamiento."
 fi
-echo "----------------------------------------------"
+echo "----------------------------------------------"s
 
 echo "[3] Ejecutando comparación TRON vs MLlib..."
 python evaluation.py \
